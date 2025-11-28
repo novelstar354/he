@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="https://png.pngtree.com/png-clipart/20230916/original/pngtree-google-translate-icon-three-dimensional-vector-png-image_12256679.png" sizes="16×16" type="image/png" />    
+  <title>ランダム翻訳機（日本語 → ランダム言語）</title>
+  <style>
+    :root{--bg:#0f1722;--card:#0b1220;--accent:#7c3aed;--muted:#94a3b8;color-scheme:dark}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP","游ゴシック体",sans-serif;background:linear-gradient(180deg,#071026 0%, #051021 100%);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:880px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:20px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    h1{margin:0 0 6px 0;font-size:1.25rem}
+    p.lead{margin:0 0 18px 0;color:var(--muted);font-size:0.95rem}
+    textarea{width:100%;min-height:140px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;font-size:1rem;resize:vertical}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    button{background:var(--accent);border:0;padding:10px 14px;border-radius:8px;color:white;cursor:pointer;font-weight:600}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .meta{display:flex;gap:8px;align-items:center;margin-top:12px}
+    .chip{background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:999px;font-weight:600}
+    .result{margin-top:16px;padding:12px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));min-height:80px}
+    .small{font-size:0.9rem;color:var(--muted)}
+    .row{display:flex;gap:8px;align-items:center}
+    .lang-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    .lang-item{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-weight:600;font-size:0.9rem}
+    footer{margin-top:16px;color:var(--muted);font-size:0.85rem}
+    @media (max-width:600px){.controls{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ランダム翻訳機 — 日本語をランダムに翻訳</h1>
+    <p class="lead">入力した日本語を、指定した候補（日本語・英語・アラビア語・フランス語・キニアルワンダ語・セーシェル・クレオール語）からランダムに1つ選んで翻訳します。APIが使えない場合は、Google 翻訳のページを開きます。</p>
+
+    <label for="source">日本語（入力）</label>
+    <textarea id="source" placeholder="ここに日本語で入力してください。例：今日は良い天気ですね。"></textarea>
+
+    <div class="meta">
+      <div class="chip" id="picked">選ばれた言語: —</div>
+      <div class="small">翻訳先候補：</div>
+      <div class="lang-list" aria-hidden="true">
+        <div class="lang-item">日本語</div>
+        <div class="lang-item">English</div>
+        <div class="lang-item">العربية</div>
+        <div class="lang-item">Français</div>
+        <div class="lang-item">Kinyarwanda</div>
+        <div class="lang-item">Seychellois Creole</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="translate">ランダムに翻訳</button>
+      <button class="secondary" id="copy">結果をコピー</button>
+      <button class="secondary" id="open">Google 翻訳で開く（新しいタブ）</button>
+      <button class="secondary" id="shuffle">候補をシャッフル（表示のみ）</button>
+    </div>
+
+    <div class="result" id="result">ここに翻訳結果が表示されます。</div>
+
+    <footer>備考：このページはクライアントサイドのサンプルです。より正確な翻訳を求める場合は、サーバー側の翻訳 API（LibreTranslate, DeepL, Google Cloud Translate など）を接続してください。</footer>
+  </div>
+
+  <script>
+    // 言語候補（表示名と翻訳サービス用のコード）
+    // 注意：一部の翻訳サービスは Seychellois Creole (crs) をサポートしていない場合があります。
+    const LANGS = [
+      {name: '日本語', code: 'ja'},
+      {name: 'English', code: 'en'},
+      {name: 'العربية', code: 'ar'},
+      {name: 'Français', code: 'fr'},
+      {name: 'Kinyarwanda', code: 'rw'},
+      {name: 'Seychellois Creole', code: 'crs'}
+    ];
+
+    const sourceEl = document.getElementById('source');
+    const resEl = document.getElementById('result');
+    const pickedEl = document.getElementById('picked');
+    const translateBtn = document.getElementById('translate');
+    const copyBtn = document.getElementById('copy');
+    const openBtn = document.getElementById('open');
+    const shuffleBtn = document.getElementById('shuffle');
+
+    function pickRandom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+    // Try to use a public LibreTranslate instance first. If it fails, fallback to opening Google Translate.
+    async function translateText(text, targetCode){
+      // if target is same as source, just return text
+      if(targetCode === 'ja') return text;
+
+      // LibreTranslate public instance (may be rate-limited or unavailable)
+      const libreUrl = 'https://libretranslate.de/translate';
+
+      try{
+        const resp = await fetch(libreUrl, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({q:text, source:'ja', target:targetCode, format:'text'})
+        });
+        if(!resp.ok) throw new Error('LibreTranslate response not ok');
+        const data = await resp.json();
+        if(data && data.translatedText) return data.translatedText;
+        throw new Error('LibreTranslate returned unexpected data');
+      }catch(err){
+        console.warn('LibreTranslate failed:', err.message);
+        // fallback: try MyMemory (open API)
+        try{
+          const memResp = await fetch('https://api.mymemory.translated.net/get?'+
+            new URLSearchParams({q:text, langpair:'ja|'+targetCode}));
+          const memJson = await memResp.json();
+          if(memJson && memJson.responseData && memJson.responseData.translatedText){
+            return memJson.responseData.translatedText + '\n\n(翻訳供給元: MyMemory)';
+          }
+        }catch(e){
+          console.warn('MyMemory failed:', e.message);
+        }
+        // 最終フォールバックは null -> caller will open Google Translate
+        return null;
+      }
+    }
+
+    translateBtn.addEventListener('click', async ()=>{
+      const text = sourceEl.value.trim();
+      if(!text){ resEl.textContent = '翻訳するテキストを入力してください。'; return; }
+
+      const picked = pickRandom(LANGS);
+      pickedEl.textContent = '選ばれた言語: ' + picked.name;
+      resEl.textContent = '翻訳中... ('+picked.name+')';
+
+      const translated = await translateText(text, picked.code);
+      if(translated !== null){
+        resEl.textContent = translated;
+        resEl.dataset.lang = picked.code;
+      } else {
+        resEl.textContent = '自動翻訳が利用できませんでした。右のボタンで Google 翻訳を新しいタブで開きます。';
+        resEl.dataset.lang = picked.code;
+      }
+    });
+
+    copyBtn.addEventListener('click', ()=>{
+      const t = resEl.textContent || '';
+      if(!t){ alert('コピーするテキストがありません'); return; }
+      navigator.clipboard.writeText(t).then(()=>{
+        copyBtn.textContent = 'コピーしました';
+        setTimeout(()=>copyBtn.textContent='結果をコピー',1200);
+      }).catch(()=>alert('コピーできませんでした'));
+    });
+
+    openBtn.addEventListener('click', ()=>{
+      const text = sourceEl.value.trim();
+      if(!text){ alert('翻訳するテキストを入力してください。'); return; }
+      // use the currently picked language if exists, otherwise pick a random one
+      const langCode = (resEl.dataset.lang) ? resEl.dataset.lang : pickRandom(LANGS).code;
+      // For Google Translate, build a URL that opens translation (sl=ja, tl=langCode)
+      // If the code is 'crs' and Google doesn't support it, fallback to 'fr' as a best-effort.
+      const safeCode = (langCode === 'crs') ? 'fr' : langCode;
+      const url = 'https://translate.google.com/?sl=ja&tl='+encodeURIComponent(safeCode)+
+                  '&text='+encodeURIComponent(text)+'&op=translate';
+      window.open(url, '_blank');
+    });
+
+    shuffleBtn.addEventListener('click', ()=>{
+      // just shuffle the visual list for fun
+      const list = document.querySelector('.lang-list');
+      const items = Array.from(list.children);
+      for(let i=items.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        list.appendChild(items[j]);
+      }
+    });
+
+    // quick keyboard shortcut: Ctrl+Enter to translate
+    sourceEl.addEventListener('keydown',(e)=>{
+      if((e.ctrlKey||e.metaKey) && e.key === 'Enter'){
+        translateBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
