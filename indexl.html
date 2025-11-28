@@ -25,6 +25,14 @@
     .lang-item{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-weight:600;font-size:0.9rem}
     footer{margin-top:16px;color:var(--muted);font-size:0.85rem}
     @media (max-width:600px){.controls{flex-direction:column}}
+  footer {
+           padding: 30px;
+           text-align: center;
+           font-size: 0.85rem;
+           color: rgba(255,255,255,0.5);
+           border-top: 1px solid rgba(255,255,255,0.1);
+           margin-top: 60px;
+       }      
   </style>
 </head>
 <body>
@@ -57,8 +65,10 @@
 
     <div class="result" id="result">ここに翻訳結果が表示されます。</div>
 
-    <footer>備考：このページはクライアントサイドのサンプルです。より正確な翻訳を求める場合は、サーバー側の翻訳 API（LibreTranslate, DeepL, Google Cloud Translate など）を接続してください。</footer>
-  </div>
+    <footer>
+       © 2025 STAR CORPORATION - All Rights Reserved.
+   </footer>
+  
 
   <script>
     // 言語候補（表示名と翻訳サービス用のコード）
